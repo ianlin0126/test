@@ -81,7 +81,13 @@
       gap: 12px;
     }
     .progress { font-size: 20px; font-weight: 600; }
-    .stars { font-size: 22px; font-weight: 700; }
+    .stats { font-size: 20px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+    .stats .timer { font-weight: 600; opacity: 0.85; font-variant-numeric: tabular-nums; }
+    .result-time {
+      font-size: 22px;
+      text-align: center;
+      opacity: 0.92;
+    }
     .home-btn {
       background: rgba(255,255,255,0.22);
       color: #fff;
@@ -199,7 +205,17 @@
         currentIdx: 0,
         correct: 0,
         answered: false,
+        solveTimes: [],
+        questionStartTime: 0,
+        timerInterval: null,
       };
+
+      function stopTimer() {
+        if (state.timerInterval) {
+          clearInterval(state.timerInterval);
+          state.timerInterval = null;
+        }
+      }
 
       function randInt(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -278,6 +294,7 @@
       function clear() { app.textContent = ''; }
 
       function showStart() {
+        stopTimer();
         clear();
         const screen = el('div', { class: 'screen' }, [
           el('h1', null, 'Math Quest 🚀'),
@@ -315,12 +332,15 @@
         state.questions = generateQuestions(mode);
         state.currentIdx = 0;
         state.correct = 0;
+        state.solveTimes = [];
         showQuestion();
       }
 
       function showQuestion() {
+        stopTimer();
         clear();
         state.answered = false;
+        state.questionStartTime = Date.now();
         const q = state.questions[state.currentIdx];
 
         const choicesGrid = el('div', { class: 'choices' });
@@ -349,15 +369,24 @@
             el('div', { class: 'progress' },
               'Question ' + (state.currentIdx + 1) + ' of ' + QUESTIONS_PER_ROUND),
             el('div', {
-              class: 'stars',
+              class: 'stats',
               aria: { label: state.correct + ' correct so far' },
-            }, '⭐ ' + state.correct),
+            }, [
+              el('span', null, '⭐ ' + state.correct),
+              el('span', { class: 'timer', id: 'timer' }, '⏱ 0s'),
+            ]),
           ]),
           el('div', { class: 'equation' }, q.text + ' = ?'),
           choicesGrid,
           feedback,
         ]);
         app.appendChild(screen);
+
+        state.timerInterval = setInterval(function () {
+          const t = Math.floor((Date.now() - state.questionStartTime) / 1000);
+          const tEl = document.getElementById('timer');
+          if (tEl) tEl.textContent = '⏱ ' + t + 's';
+        }, 250);
       }
 
       const RIGHT_MESSAGES = ['Awesome! 🎉', 'Great job! ⭐', 'Yes! 🌟', 'You got it! 💫', 'Nice work! 🚀', 'Wow! ✨'];
@@ -369,6 +398,8 @@
         if (choice === answer) {
           state.answered = true;
           state.correct++;
+          state.solveTimes.push(Date.now() - state.questionStartTime);
+          stopTimer();
           btn.classList.add('correct');
           allButtons.forEach(function (b) { b.disabled = true; });
           feedback.textContent = RIGHT_MESSAGES[Math.floor(Math.random() * RIGHT_MESSAGES.length)];
@@ -387,6 +418,7 @@
       }
 
       function showResults() {
+        stopTimer();
         clear();
         const score = state.correct;
         const total = state.questions.length;
@@ -397,12 +429,18 @@
         else if (ratio >= 0.4) { stars = '⭐';     message = 'Good effort!'; }
         else                    { stars = '🌱';     message = 'Keep practicing!'; }
 
+        const avgSec = state.solveTimes.length
+          ? (state.solveTimes.reduce(function (a, b) { return a + b; }, 0) / state.solveTimes.length / 1000)
+          : 0;
+
         const screen = el('div', { class: 'screen' }, [
           el('h1', null, 'You did it!'),
           el('div', { class: 'result-stars' }, stars),
           el('div', { class: 'result-message' }, message),
           el('div', { class: 'result-score' },
             'You got ' + score + ' out of ' + total + ' right!'),
+          el('div', { class: 'result-time' },
+            '⏱ Average: ' + avgSec.toFixed(1) + ' seconds per question'),
           el('button', {
             class: 'btn',
             onclick: function () { startRound(state.mode); },
